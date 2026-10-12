@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lab Portal — проверка Google-входа</title>
+  <meta name="robots" content="noindex,nofollow">
+  <style>
+    :root{color-scheme:light;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#172638;background:#f4f7fb}
+    *{box-sizing:border-box}body{margin:0;padding:36px 16px}
+    main{max-width:620px;margin:auto;padding:30px;background:white;border:1px solid #e1e7ee;border-radius:18px;box-shadow:0 12px 35px #132d4510}
+    h1{font-size:24px;margin:0 0 12px}p{line-height:1.65;color:#445264}
+    label{display:block;font-weight:600;margin:24px 0 8px}
+    input{width:100%;padding:12px;border:1px solid #b9c8d5;border-radius:10px;font:inherit}
+    button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:12px 18px;background:#1b4f91;color:white;margin:14px 0 10px}
+    button:disabled{opacity:.55;cursor:default}
+    #googleButton{min-height:46px;margin-top:14px}
+    #status{min-height:50px;padding:14px 16px;margin-top:16px;border-radius:10px;background:#eef3f9;color:#283a4b;line-height:1.5;white-space:pre-line}
+    small{color:#566477;line-height:1.6;display:block}code{word-break:break-word}
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<main>
+  <h1>Тест Google-входа Lab Portal</h1>
+  <p>Это временная страница для первой регистрации владельца. Она <strong>не меняет основной сайт</strong> и не запрашивает пароль Google.</p>
+  <p>Открой страницу с адреса <code>https://chem1s3.github.io/lab-portal/lab-portal-google-login-test.html</code>. Не запускай HTML двойным щелчком с компьютера: Google проверяет разрешённый адрес сайта.</p>
+  <label for="clientId">OAuth Client ID</label>
+  <input id="clientId" autocomplete="off" spellcheck="false" placeholder="…apps.googleusercontent.com" aria-label="Google OAuth Client ID">
+  <small>Скопируй Client ID из Google Cloud → Google Auth Platform → Clients → Lab Portal Web Client. Это публичный идентификатор; он не сохраняется на странице. Не вводи Client secret.</small>
+  <button type="button" id="init">Показать кнопку «Войти через Google»</button>
+  <div id="googleButton" aria-label="Кнопка Google-входа"></div>
+  <div id="status" role="status" aria-live="polite">Ожидаю Client ID.</div>
+  <p><small>После входа будет отправлен запрос <code>whoami</code> на ваш тестовый Apps Script. Из-за ограничений CORS страница <strong>не может подтвердить ответ сервера</strong>. Для проверки открой Google Таблицу → лист <code>users</code> и найди строку с <code>role = owner</code> и заполненным <code>googleSub</code>. Не присылай никому Google ID-токены.</small></p>
+</main>
+<script>
+(() => {
+  'use strict';
+  const SERVER_URL='https://script.google.com/macros/s/AKfycbxf61CMhjjIMCFuV1vESBBE9cI5AbnohffErYNYi2ylLdpEO_ITymoYV9lpMtZM_qUX/exec';
+  const button=document.getElementById('init');
+  const input=document.getElementById('clientId');
+  const slot=document.getElementById('googleButton');
+  const status=document.getElementById('status');
+  const display=msg=>{status.textContent=msg;};
+  button.addEventListener('click',()=>{
+    const clientId=input.value.trim();
+    if(!/^\d+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)){
+      display('Вставь полный OAuth Client ID, оканчивающийся на .apps.googleusercontent.com');return;
+    }
+    if(!window.google?.accounts?.id){display('Google Identity Services ещё загружается. Подожди несколько секунд и попробуй снова.');return;}
+    google.accounts.id.initialize({client_id:clientId,callback:onCredential,auto_select:false,cancel_on_tap_outside:true});
+    slot.replaceChildren();
+    google.accounts.id.renderButton(slot,{theme:'outline',size:'large',type:'standard',text:'signin_with',width:310});
+    button.disabled=true;input.readOnly=true;
+    display('Теперь нажми кнопку Google выше и выбери тот аккаунт, email которого указан в OWNER_EMAIL.');
+  });
+  async function onCredential(response){
+    if(!response || typeof response.credential!=='string'){
+      display('Google не выдал подтверждение входа. Попробуй ещё раз.');return;
+    }
+    display('Google выдал подтверждение. Отправляю его на тестовый сервер…');
+    try{
+      // Google Apps Script ContentService redirects to googleusercontent.com and
+      // its response cannot generally be read from a GitHub Pages origin.
+      // This no-cors request can SEND the POST, but produces an opaque response.
+      await fetch(SERVER_URL,{
+        method:'POST',mode:'no-cors',redirect:'follow',credentials:'omit',
+        headers:{'Content-Type':'text/plain;charset=UTF-8'},
+        body:JSON.stringify({action:'whoami',idToken:response.credential})
+      });
+      display('Запрос отправлен. Это НЕ подтверждение успешного входа.\n\nОткрой Google Таблицу → users и проверь строку owner и столбец googleSub. Обнови вкладку таблицы при необходимости.');
+    }catch(_){
+      display('Браузер сообщил об ошибке отправки или перенаправления. Результат неизвестен. Проверь users: запрос мог дойти до сервера.');
+    }
+  }
+})();
+</script>
+</body>
+</html>
